@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon-32.png">
+<title>AppRove — Invoice Review</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1b1f27; --card2:#20242e; --accent:#3b82f6;
+    --brand-blue:#0b3f9e; --brand-teal:#14c8b6;
+    --brand-gradient:linear-gradient(135deg, var(--brand-blue), var(--brand-teal));
+    --green:#22c55e; --amber:#f59e0b; --red:#ef4444; --text:#f2f4f8; --sub:#9aa3b2;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  button, .keypad, .btn, input{touch-action:manipulation;}
+  html,body{height:100%; margin:0; overscroll-behavior:none;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+    display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+  }
+  header{
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 18px 12px;
+    display:flex; align-items:center; justify-content:space-between; flex:0 0 auto;
+  }
+  header h1{font-size:17px; font-weight:600; margin:0;}
+  header .subtitle{font-size:11px; color:var(--sub); margin-top:2px;}
+  .header-right{display:flex; align-items:center; gap:12px;}
+  header .count{font-size:13px; color:var(--sub);}
+  .icon-btn{background:none; border:none; color:var(--sub); font-size:18px; cursor:pointer; padding:4px;}
+  .progress-track{height:3px; background:#252a34; flex:0 0 auto;}
+  .progress-fill{height:100%; background:var(--brand-gradient); width:0%; transition:width .25s;}
+
+  .screen{flex:1 1 auto; display:none; overflow:hidden; position:relative;}
+  .screen.active{display:flex; flex-direction:column;}
+  .centered-screen{align-items:center; justify-content:center; text-align:center; padding:32px; overflow-y:auto;}
+  .centered-screen .icon{font-size:52px; margin-bottom:14px;}
+  .centered-screen h2{font-size:20px; margin:0 0 8px;}
+  .centered-screen p{color:var(--sub); font-size:14px; line-height:1.5; max-width:320px; margin:0 0 24px;}
+
+  .btn{
+    appearance:none; border:none; border-radius:14px; padding:14px 26px; font-size:16px;
+    font-weight:600; color:#fff; background:var(--brand-gradient); cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease; box-shadow:0 4px 14px rgba(11,63,158,.35);
+  }
+  .btn:active{transform:scale(.97); box-shadow:0 2px 8px rgba(11,63,158,.3);}
+  .btn.secondary{background:var(--card2); color:var(--text); box-shadow:none;}
+  .btn.ghost{background:transparent; color:var(--sub); font-weight:500; box-shadow:none;}
+  .btn.small{padding:8px 14px; font-size:13px; border-radius:10px;}
+  .btn.danger{background:var(--red); box-shadow:none;}
+  input[type=file]{display:none;}
+  .brand-logo{display:block; margin:0 auto 18px; max-width:220px; height:auto;}
+  .header-logo{width:26px; height:26px; border-radius:7px; display:block;}
+  header .title-row{display:flex; align-items:center; gap:8px;}
+  header h1{background:var(--brand-gradient); -webkit-background-clip:text; background-clip:text; color:transparent;}
+
+  .gesture-guide{width:100%; max-width:340px; margin:0 auto 22px; text-align:left;}
+  .gesture-guide .row{display:flex; align-items:center; gap:14px; margin-bottom:16px; color:var(--sub); font-size:14px;}
+  .gesture-guide .row .g{font-size:22px; width:34px; text-align:center; flex:0 0 auto;}
+
+  /* ---- PIN screen ---- */
+  .pin-dots{display:flex; gap:16px; justify-content:center; margin:8px 0 26px;}
+  .pin-dots .dot{width:16px; height:16px; border-radius:50%; border:2px solid var(--sub); transition:.15s;}
+  .pin-dots .dot.filled{background:var(--accent); border-color:var(--accent);}
+  .pin-dots.shake{animation:shake .4s;}
+  @keyframes shake{
+    10%,90%{transform:translateX(-4px);} 20%,80%{transform:translateX(6px);}
+    30%,50%,70%{transform:translateX(-10px);} 40%,60%{transform:translateX(10px);}
+  }
+  .pin-error{color:var(--red); font-size:13px; height:16px; margin-bottom:6px; visibility:hidden;}
+  .keypad{display:grid; grid-template-columns:repeat(3,72px); gap:16px; justify-content:center;}
+  .keypad button{width:72px; height:72px; border-radius:50%; border:none; background:var(--card2); color:var(--text); font-size:24px; font-weight:600;}
+  .keypad button.empty{background:transparent;}
+
+  /* ---- Swipe screen ---- */
+  #swipe-screen{align-items:center; justify-content:flex-start; padding:10px 14px 0;}
+  .stack{position:relative; width:100%; max-width:460px; flex:1 1 auto; margin:0 auto;}
+  .card{
+    position:absolute; inset:0; border-radius:20px; background:var(--card);
+    box-shadow:0 10px 30px rgba(0,0,0,.4); overflow:hidden; display:flex;
+    flex-direction:column; touch-action:none; will-change:transform;
+  }
+  .card .filename{
+    padding:10px 14px; font-size:13px; color:var(--sub); border-bottom:1px solid #2a2f3a;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto;
+  }
+  .card-viewport{flex:1 1 auto; overflow:hidden; position:relative; background:#0c0e12;}
+  .card-viewport.zoomed{overflow:auto; -webkit-overflow-scrolling:touch;}
+  .card-viewport canvas{display:block; margin:0 auto; transition:width .18s ease;}
+  .stamp{
+    position:absolute; top:26px; padding:6px 14px; border:4px solid; border-radius:10px;
+    font-size:22px; font-weight:800; letter-spacing:1px; opacity:0; transform:rotate(-18deg);
+    pointer-events:none;
+  }
+  .stamp.approve{left:20px; color:var(--green); border-color:var(--green);}
+  .stamp.review{right:20px; color:var(--amber); border-color:var(--amber); transform:rotate(18deg);}
+  .loading-hint{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:13px; text-align:center; padding:20px;}
+
+  .actions{flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:22px; padding:16px 0 calc(env(safe-area-inset-bottom,0px) + 16px);}
+  .fab{
+    width:58px; height:58px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center;
+    font-size:24px; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.35);
+  }
+  .fab.review{background:var(--amber); color:#221a03;}
+  .fab.approve{background:var(--green); color:#04220f;}
+  .fab.undo{width:46px; height:46px; background:var(--card2); color:var(--text); font-size:18px;}
+  .hint-row{flex:0 0 auto; text-align:center; color:var(--sub); font-size:12px; padding-bottom:4px;}
+
+  /* ---- Summary screen ---- */
+  .stat-row{display:flex; gap:14px; margin:18px 0 26px;}
+  .stat{background:var(--card); border-radius:16px; padding:16px 22px; min-width:110px;}
+  .stat .num{font-size:28px; font-weight:800;}
+  .stat.approve .num{color:var(--green);}
+  .stat.review .num{color:var(--amber);}
+  .stat .lbl{font-size:12px; color:var(--sub); margin-top:2px;}
+  .summary-actions{display:flex; flex-direction:column; gap:10px; width:100%; max-width:300px;}
+
+  /* ---- Settings modal ---- */
+  .modal{position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:60; padding:24px;}
+  .modal.hidden{display:none;}
+  .modal-box{background:var(--card); border-radius:16px; padding:22px; width:100%; max-width:340px; max-height:86vh; overflow:auto;}
+  .modal-box h2{margin:0 0 4px;}
+  .modal-box label{display:block; font-size:12px; color:var(--sub); margin:14px 0 4px;}
+  .modal-box input{width:100%; padding:10px 12px; border-radius:10px; border:1px solid #333a47; background:#12151b; color:var(--text); font-size:15px;}
+  .fine-print{font-size:11px; color:var(--sub); margin-top:12px; line-height:1.4;}
+  .pm-row{display:flex; align-items:center; justify-content:space-between; background:#12151b; border-radius:10px; padding:10px 12px; margin-bottom:8px;}
+  .pm-row .pm-name{font-size:14px; font-weight:600;}
+  .pm-row .pm-pin{font-size:12px; color:var(--sub);}
+  .pm-row button{background:none; border:none; color:var(--accent); font-size:13px; cursor:pointer; padding:4px 6px;}
+  #pm-list{margin-top:6px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <img src="apple-touch-icon.png" alt="" class="header-logo">
+    <div>
+      <h1>AppRove</h1>
+      <div class="subtitle" id="pm-name-label"></div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="count" id="count-label"></span>
+    <button class="icon-btn" id="settings-btn" title="Settings">⚙️</button>
+    <button class="icon-btn" id="logout-btn" title="Log out">🔒</button>
+  </div>
+</header>
+<div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+
+<div class="screen active centered-screen" id="instructions-screen">
+  <img src="logo-header.png" alt="AppRove" class="brand-logo">
+  <h2>Welcome to AppRove</h2>
+  <div class="gesture-guide">
+    <div class="row"><div class="g">👉</div><div>Swipe an invoice <b>right</b> to approve it — it's filed into your Approved folder</div></div>
+    <div class="row"><div class="g">👈</div><div>Swipe <b>left</b> to send it to Needs Review</div></div>
+    <div class="row"><div class="g">👆👆</div><div>Double‑tap to zoom in on the details, tap again to zoom out</div></div>
+    <div class="row"><div class="g">↩️</div><div>Use Undo if you swipe the wrong way</div></div>
+  </div>
+  <button class="btn" id="instructions-continue">Continue</button>
+  <div style="height:10px"></div>
+  <button class="btn ghost" id="view-log-btn">View past decisions</button>
+</div>
+
+<div class="screen centered-screen" id="pin-screen">
+  <div class="icon">🔒</div>
+  <h2>Enter Your PIN</h2>
+  <div class="pin-dots" id="pin-dots">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+  </div>
+  <div class="pin-error" id="pin-error">Incorrect PIN, try again</div>
+  <div class="keypad" id="keypad"></div>
+</div>
+
+<div class="screen centered-screen" id="auth-screen">
+  <div class="icon">🔑</div>
+  <h2>Sign in with Google</h2>
+  <p>Sign in with your own Google account so the app can load your invoices and file your decisions into your Drive folders.</p>
+  <button class="btn" id="google-signin-btn">Sign in with Google</button>
+  <div style="height:10px"></div>
+  <button class="btn ghost" id="auth-settings-btn">Open Settings</button>
+  <div class="pin-error" id="auth-error" style="height:auto;margin-top:14px;"></div>
+</div>
+
+<div class="screen centered-screen" id="loading-screen">
+  <div class="icon" id="loading-icon">☁️</div>
+  <h2 id="loading-title">Fetching invoices…</h2>
+  <p id="loading-sub">Checking the shared Drive folder</p>
+  <div id="loading-actions" style="display:none; flex-direction:column; gap:10px; width:100%; max-width:280px;">
+    <button class="btn" id="retry-drive-btn">Retry</button>
+    <button class="btn secondary" id="manual-load-btn">Choose PDFs manually</button>
+    <button class="btn secondary" id="reauth-btn">Sign in with Google again</button>
+    <button class="btn ghost" id="loading-settings-btn">Open Settings</button>
+  </div>
+  <input type="file" id="file-input" accept="application/pdf" multiple>
+</div>
+
+<div class="screen" id="swipe-screen">
+  <div class="stack" id="stack"></div>
+  <div class="hint-row">Swipe right = approve · Swipe left = review later · Double‑tap = zoom</div>
+  <div class="actions">
+    <button class="fab review" id="btn-review" title="Needs review">⏳</button>
+    <button class="fab undo" id="btn-undo" title="Undo">↩︎</button>
+    <button class="fab approve" id="btn-approve" title="Approve">✓</button>
+  </div>
+</div>
+
+<div class="screen centered-screen" id="summary-screen">
+  <div class="icon">✅</div>
+  <h2>Batch complete</h2>
+  <div class="stat-row">
+    <div class="stat approve"><div class="num" id="sum-approved">0</div><div class="lbl">Approved</div></div>
+    <div class="stat review"><div class="num" id="sum-review">0</div><div class="lbl">Needs review</div></div>
+  </div>
+  <div class="summary-actions">
+    <p id="drive-filed-note" style="color:var(--sub); font-size:13px; display:none;">Filed automatically into your Approved / Needs‑Review folders in Drive.</p>
+    <div id="export-actions" style="display:none; flex-direction:column; gap:10px;">
+      <button class="btn" id="download-zip-approved">Download Approved (.zip)</button>
+      <button class="btn secondary" id="download-zip-review">Download Needs‑Review (.zip)</button>
+    </div>
+    <button class="btn secondary" id="download-csv">Download CSV log</button>
+    <button class="btn ghost" id="load-more-btn">Check Drive for new invoices</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="settings-modal">
+  <div class="modal-box">
+    <h2>Settings</h2>
+    <label>Google OAuth Client ID (shared)</label>
+    <input type="text" id="cfg-client-id" placeholder="xxxx.apps.googleusercontent.com">
+    <label>Project Managers</label>
+    <div id="pm-list"></div>
+    <button class="btn secondary small" id="add-pm-btn">+ Add Project Manager</button>
+    <p class="fine-print">Each project manager has their own PIN, their own Inbox/Approved/Needs Review folders, and signs in with their own Google account (which needs Editor access to their own folders). The Client ID above is shared by everyone.</p>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn secondary" id="settings-cancel">Cancel</button>
+      <button class="btn" id="settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="pm-edit-modal">
+  <div class="modal-box">
+    <h2 id="pm-edit-title">Add Project Manager</h2>
+    <label>Name</label>
+    <input type="text" id="pm-name" placeholder="Jane Smith">
+    <label>4-digit PIN</label>
+    <input type="text" id="pm-pin" maxlength="4" inputmode="numeric" placeholder="1234">
+    <label>Inbox Folder ID</label>
+    <input type="text" id="pm-inbox" placeholder="1AbCdefGhIJK...">
+    <label>Approved Folder ID</label>
+    <input type="text" id="pm-approved" placeholder="1AbCdefGhIJK...">
+    <label>Needs Review Folder ID</label>
+    <input type="text" id="pm-review" placeholder="1AbCdefGhIJK...">
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn secondary" id="pm-edit-cancel">Cancel</button>
+      <button class="btn danger" id="pm-edit-delete" style="display:none;">Delete</button>
+      <button class="btn" id="pm-edit-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  if(!window.pdfjsLib || !window.JSZip){
+    const banner = document.createElement("div");
+    banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#7c2d12;color:#fff;font-size:12px;padding:8px 12px;text-align:center;z-index:999;";
+    banner.textContent = "Some features failed to load (no internet connection?). PIN and navigation still work, but PDF viewing or zip export may not. Reload once you're online.";
+    document.body.prepend(banner);
+  }
+});
+
+const LOG_KEY = "approve_decision_log_v1";
+const PROFILES_KEY = "pm_profiles_v1";
+const el = id => document.getElementById(id);
+let accessToken = null;
+let currentProfile = null;
+let editingIndex = -1; // -1 = adding new PM
+
+// ---------- shared client id ----------
+function getClientId(){ return localStorage.getItem("cfg_client_id") || ""; }
+function saveClientId(v){ localStorage.setItem("cfg_client_id", v); }
+
+// ---------- PM profiles ----------
+function getProfiles(){
+  try{ return JSON.parse(localStorage.getItem(PROFILES_KEY) || "[]"); }
+  catch(e){ return []; }
+}
+function saveProfiles(list){ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }
+
+function renderPmList(){
+  const list = getProfiles();
+  const wrap = el("pm-list");
+  wrap.innerHTML = "";
+  if(!list.length){
+    const p = document.createElement("p");
+    p.className = "fine-print";
+    p.textContent = "No project managers added yet.";
+    wrap.appendChild(p);
+    return;
+  }
+  list.forEach((pm, i) => {
+    const row = document.createElement("div");
+    row.className = "pm-row";
+    row.innerHTML = `<div><div class="pm-name"></div><div class="pm-pin">PIN ••••</div></div>`;
+    row.querySelector(".pm-name").textContent = pm.name || "(unnamed)";
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => openPmEdit(i));
+    row.appendChild(editBtn);
+    wrap.appendChild(row);
+  });
+}
+
+function openPmEdit(index){
+  editingIndex = index;
+  const list = getProfiles();
+  const pm = index >= 0 ? list[index] : { name:"", pin:"", inboxFolderId:"", approvedFolderId:"", reviewFolderId:"" };
+  el("pm-edit-title").textContent = index >= 0 ? "Edit Project Manager" : "Add Project Manager";
+  el("pm-name").value = pm.name;
+  el("pm-pin").value = pm.pin;
+  el("pm-inbox").value = pm.inboxFolderId;
+  el("pm-approved").value = pm.approvedFolderId;
+  el("pm-review").value = pm.reviewFolderId;
+  el("pm-edit-delete").style.display = index >= 0 ? "inline-block" : "none";
+  el("pm-edit-modal").classList.remove("hidden");
+}
+el("add-pm-btn").addEventListener("click", () => openPmEdit(-1));
+el("pm-edit-cancel").addEventListener("click", () => el("pm-edit-modal").classList.add("hidden"));
+el("pm-edit-delete").addEventListener("click", () => {
+  const list = getProfiles();
+  if(editingIndex >= 0){
+    list.splice(editingIndex, 1);
+    saveProfiles(list);
+    renderPmList();
+  }
+  el("pm-edit-modal").classList.add("hidden");
+});
+el("pm-edit-save").addEventListener("click", () => {
+  const name = el("pm-name").value.trim();
+  const pin = el("pm-pin").value.trim();
+  const inboxFolderId = el("pm-inbox").value.trim();
+  const approvedFolderId = el("pm-approved").value.trim();
+  const reviewFolderId = el("pm-review").value.trim();
+  if(!name){ alert("Enter a name."); return; }
+  if(!/^\d{4}$/.test(pin)){ alert("PIN must be exactly 4 digits."); return; }
+  const list = getProfiles();
+  const dupe = list.some((p, i) => p.pin === pin && i !== editingIndex);
+  if(dupe){ alert("That PIN is already used by another project manager. Choose a different one."); return; }
+  const record = { name, pin, inboxFolderId, approvedFolderId, reviewFolderId };
+  if(editingIndex >= 0) list[editingIndex] = record;
+  else list.push(record);
+  saveProfiles(list);
+  renderPmList();
+  el("pm-edit-modal").classList.add("hidden");
+});
+
+function openSettings(){
+  el("cfg-client-id").value = getClientId();
+  renderPmList();
+  el("settings-modal").classList.remove("hidden");
+}
+el("settings-btn").addEventListener("click", openSettings);
+el("loading-settings-btn").addEventListener("click", openSettings);
+el("auth-settings-btn").addEventListener("click", openSettings);
+el("settings-cancel").addEventListener("click", () => el("settings-modal").classList.add("hidden"));
+el("settings-save").addEventListener("click", () => {
+  saveClientId(el("cfg-client-id").value.trim());
+  el("settings-modal").classList.add("hidden");
+});
+
+// ---------- state ----------
+let queue = [];        // [{id?, key, name, blob, source}]
+let index = 0;
+let history = [];      // stack of {item, status} for undo
+let renderedCards = new Map(); // key -> {el, viewport, canvas, zoomed}
+
+// ---------- persistent decision log ----------
+function loadLog(){
+  try { return JSON.parse(localStorage.getItem(LOG_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function saveLog(log){ localStorage.setItem(LOG_KEY, JSON.stringify(log)); }
+function recordDecision(key, name, status){
+  const log = loadLog();
+  log[key] = { name, status, timestamp: new Date().toISOString(), pm: currentProfile ? currentProfile.name : "" };
+  saveLog(log);
+}
+
+// ---------- screen switching ----------
+function showScreen(name){
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  el(name).classList.add("active");
+}
+
+// ---------- instructions ----------
+el("instructions-continue").addEventListener("click", () => {
+  showScreen("pin-screen");
+  resetPinEntry();
+});
+el("view-log-btn").addEventListener("click", () => {
+  const log = loadLog();
+  const entries = Object.values(log);
+  if(!entries.length){ alert("No past decisions recorded yet."); return; }
+  const approved = entries.filter(x=>x.status==="approved").length;
+  const review = entries.filter(x=>x.status==="review").length;
+  alert(`All-time log:\n${approved} approved\n${review} needs review\n\nUse "Download CSV log" after a batch to export.`);
+});
+
+// ---------- PIN screen ----------
+let pinBuffer = "";
+function resetPinEntry(){ pinBuffer=""; renderPinDots(); el("pin-error").style.visibility="hidden"; }
+function renderPinDots(){
+  const dots = el("pin-dots").children;
+  for(let i=0;i<4;i++){ dots[i].classList.toggle("filled", i < pinBuffer.length); }
+}
+function buildKeypad(){
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = el("keypad");
+  kp.innerHTML = "";
+  keys.forEach(k => {
+    const btn = document.createElement("button");
+    if(k === ""){ btn.className = "empty"; btn.disabled = true; }
+    else{
+      btn.textContent = k;
+      btn.addEventListener("click", () => handleKey(k));
+    }
+    kp.appendChild(btn);
+  });
+}
+function handleKey(k){
+  if(k === "⌫"){ pinBuffer = pinBuffer.slice(0,-1); renderPinDots(); return; }
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += k;
+  renderPinDots();
+  if(pinBuffer.length === 4) checkPin();
+}
+function checkPin(){
+  const profiles = getProfiles();
+  const match = profiles.find(p => p.pin === pinBuffer);
+  if(match){
+    currentProfile = match;
+    el("pm-name-label").textContent = "Signed in as " + match.name;
+    showScreen("auth-screen");
+  } else {
+    el("pin-error").style.visibility = "visible";
+    const dots = el("pin-dots");
+    dots.classList.add("shake");
+    setTimeout(() => { dots.classList.remove("shake"); resetPinEntry(); }, 400);
+  }
+}
+buildKeypad();
+
+// ---------- logout ----------
+el("logout-btn").addEventListener("click", () => {
+  accessToken = null;
+  currentProfile = null;
+  el("pm-name-label").textContent = "";
+  showScreen("pin-screen");
+  resetPinEntry();
+});
+
+// ---------- Google sign-in (OAuth) ----------
+function showAuthError(msg){
+  const e = el("auth-error");
+  e.textContent = msg;
+  e.style.visibility = "visible";
+}
+el("google-signin-btn").addEventListener("click", () => {
+  const clientId = getClientId();
+  if(!clientId){ showAuthError("Add the Google OAuth Client ID in Settings first."); return; }
+  if(!window.google || !google.accounts || !google.accounts.oauth2){
+    showAuthError("Google sign-in library didn't load. Check your internet connection and reload.");
+    return;
+  }
+  el("auth-error").style.visibility = "hidden";
+  try{
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: "https://www.googleapis.com/auth/drive",
+      callback: (resp) => {
+        if(resp && resp.access_token){
+          accessToken = resp.access_token;
+          showScreen("loading-screen");
+          startDriveLoad();
+        } else {
+          showAuthError("Sign-in didn't complete. Try again.");
+        }
+      }
+    });
+    client.requestAccessToken();
+  }catch(err){
+    showAuthError("Sign-in failed: " + ((err && err.message) || "unknown error"));
+  }
+});
+el("reauth-btn").addEventListener("click", () => {
+  accessToken = null;
+  showScreen("auth-screen");
+});
+
+// ---------- Google Drive ----------
+async function fetchDriveFiles(folderId){
+  const q = encodeURIComponent(`'${folderId}' in parents and mimeType='application/pdf' and trashed=false`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=name&pageSize=200`;
+  const res = await fetch(url, { headers: { Authorization: "Bearer " + accessToken } });
+  if(!res.ok){
+    if(res.status === 401) accessToken = null;
+    throw new Error(`Drive API error (${res.status}). Make sure your Google account has access to this folder.`);
+  }
+  const data = await res.json();
+  return data.files || [];
+}
+async function fetchDriveBlob(fileId){
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+  const res = await fetch(url, { headers: { Authorization: "Bearer " + accessToken } });
+  if(!res.ok) throw new Error("Could not download this invoice from Drive.");
+  return await res.blob();
+}
+async function moveDriveFile(fileId, addFolderId, removeFolderId){
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${encodeURIComponent(addFolderId)}&removeParents=${encodeURIComponent(removeFolderId)}&fields=id,parents`;
+  const res = await fetch(url, { method:"PATCH", headers: { Authorization: "Bearer " + accessToken } });
+  if(!res.ok) throw new Error(`Drive wouldn't move this file (error ${res.status}). Check that your account has edit access.`);
+  return await res.json();
+}
+async function getItemBlob(item){
+  if(!item.blob && item.source === "drive"){
+    item.blob = await fetchDriveBlob(item.id);
+  }
+  return item.blob;
+}
+
+function showLoadingError(title, sub, isInfo){
+  el("loading-title").textContent = title;
+  el("loading-sub").textContent = sub;
+  el("loading-icon").textContent = isInfo ? "✅" : "⚠️";
+  el("loading-actions").style.display = "flex";
+}
+
+async function startDriveLoad(){
+  el("loading-title").textContent = "Fetching invoices…";
+  el("loading-sub").textContent = "Checking your Drive folder";
+  el("loading-actions").style.display = "none";
+  el("loading-icon").textContent = "☁️";
+
+  if(!currentProfile){
+    showLoadingError("No project manager selected", "Please log out and enter your PIN again.");
+    return;
+  }
+  if(!currentProfile.inboxFolderId || !currentProfile.approvedFolderId || !currentProfile.reviewFolderId){
+    showLoadingError("Your folders aren't set up yet", "Add your Inbox, Approved, and Needs Review folder IDs for " + currentProfile.name + " in Settings.");
+    return;
+  }
+  if(!accessToken){
+    showScreen("auth-screen");
+    return;
+  }
+  try{
+    const files = await fetchDriveFiles(currentProfile.inboxFolderId);
+    if(!files.length){
+      showLoadingError("All caught up", "No new invoices are waiting in your Inbox folder right now.", true);
+      return;
+    }
+    queue = files.map(f => ({ id:f.id, key:f.id, name:f.name, blob:null, source:"drive" }));
+    index = 0; history = [];
+    showScreen("swipe-screen");
+    buildStack();
+  }catch(err){
+    showLoadingError("Couldn't load the Drive folder", (err && err.message) || "Check your sign-in and folder IDs.");
+  }
+}
+el("retry-drive-btn").addEventListener("click", startDriveLoad);
+el("manual-load-btn").addEventListener("click", () => el("file-input").click());
+el("file-input").addEventListener("change", (e) => {
+  const files = Array.from(e.target.files || []);
+  if(!files.length) return;
+  queue = files.map(f => ({ key:"local_"+f.name+"_"+f.size, name:f.name, blob:f, source:"local" }));
+  index = 0; history = [];
+  showScreen("swipe-screen");
+  buildStack();
+});
+el("load-more-btn").addEventListener("click", () => {
+  showScreen("loading-screen");
+  startDriveLoad();
+});
+
+// ---------- stack rendering ----------
+function updateHeader(){
+  el("count-label").textContent = queue.length ? `${Math.min(index+1, queue.length)} of ${queue.length}` : "";
+  const pct = queue.length ? (index / queue.length) * 100 : 0;
+  el("progress-fill").style.width = pct + "%";
+}
+
+function buildStack(){
+  const stack = el("stack");
+  stack.innerHTML = "";
+  renderedCards.clear();
+  updateHeader();
+  const visible = queue.slice(index, index + 3);
+  if(!visible.length){ finishBatch(); return; }
+  for(let i = visible.length - 1; i >= 0; i--){
+    const item = visible[i];
+    const cardEl = makeCardEl(item, i);
+    stack.appendChild(cardEl);
+    if(i === 0) attachGestures(cardEl, item);
+    renderPdfIntoCard(item, cardEl);
+  }
+}
+
+function makeCardEl(item, depthFromTop){
+  const card = document.createElement("div");
+  card.className = "card";
+  const scale = 1 - depthFromTop * 0.035;
+  const yOff = depthFromTop * 10;
+  card.style.transform = `translateY(${yOff}px) scale(${scale})`;
+  card.style.zIndex = String(10 - depthFromTop);
+  card.dataset.key = item.key;
+
+  const fname = document.createElement("div");
+  fname.className = "filename";
+  fname.textContent = item.name;
+  card.appendChild(fname);
+
+  const viewport = document.createElement("div");
+  viewport.className = "card-viewport";
+  const hint = document.createElement("div");
+  hint.className = "loading-hint";
+  hint.textContent = "Loading…";
+  viewport.appendChild(hint);
+  card.appendChild(viewport);
+
+  const stampA = document.createElement("div");
+  stampA.className = "stamp approve";
+  stampA.textContent = "APPROVED";
+  const stampR = document.createElement("div");
+  stampR.className = "stamp review";
+  stampR.textContent = "REVIEW";
+  card.appendChild(stampA);
+  card.appendChild(stampR);
+
+  return card;
+}
+
+async function renderPdfIntoCard(item, cardEl){
+  const viewport = cardEl.querySelector(".card-viewport");
+  try{
+    if(!window.pdfjsLib) throw new Error("PDF viewer library didn't load. Check your internet connection and reload.");
+    const blob = await getItemBlob(item);
+    const buf = await blob.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+    const page = await pdf.getPage(1);
+    const containerWidth = viewport.clientWidth || 320;
+    const baseViewport = page.getViewport({scale:1});
+    const scale = (containerWidth / baseViewport.width) * (window.devicePixelRatio || 1) * 1.3;
+    const scaledViewport = page.getViewport({scale});
+    const canvas = document.createElement("canvas");
+    canvas.width = scaledViewport.width;
+    canvas.height = scaledViewport.height;
+    canvas.style.width = "100%";
+    canvas.style.height = "auto";
+    viewport.innerHTML = "";
+    viewport.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+    await page.render({canvasContext:ctx, viewport:scaledViewport}).promise;
+    renderedCards.set(item.key, {viewport, canvas, zoomed:false});
+    attachZoom(item.key);
+  }catch(err){
+    viewport.innerHTML = `<div class="loading-hint">Couldn't load this invoice<br>(${(err && err.message) || "unknown error"})</div>`;
+  }
+}
+
+function attachZoom(key){
+  const rec = renderedCards.get(key);
+  if(!rec) return;
+  let lastTap = 0;
+  rec.viewport.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if(now - lastTap < 300){
+      toggleZoom(key);
+      e.preventDefault();
+    }
+    lastTap = now;
+  });
+  rec.viewport.addEventListener("dblclick", () => toggleZoom(key));
+}
+
+function toggleZoom(key){
+  const rec = renderedCards.get(key);
+  if(!rec) return;
+  rec.zoomed = !rec.zoomed;
+  rec.viewport.classList.toggle("zoomed", rec.zoomed);
+  rec.canvas.style.width = rec.zoomed ? "220%" : "100%";
+  if(!rec.zoomed){ rec.viewport.scrollTop = 0; rec.viewport.scrollLeft = 0; }
+}
+
+function isZoomed(key){
+  const rec = renderedCards.get(key);
+  return rec ? rec.zoomed : false;
+}
+
+// ---------- swipe gestures ----------
+function attachGestures(cardEl, item){
+  let startX=0, startY=0, curX=0, curY=0, dragging=false;
+
+  cardEl.addEventListener("pointerdown", (e) => {
+    if(isZoomed(item.key)) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    cardEl.setPointerCapture(e.pointerId);
+  });
+
+  cardEl.addEventListener("pointermove", (e) => {
+    if(!dragging) return;
+    curX = e.clientX - startX;
+    curY = e.clientY - startY;
+    const rot = curX / 14;
+    cardEl.style.transform = `translate(${curX}px, ${curY}px) rotate(${rot}deg)`;
+    const approveStamp = cardEl.querySelector(".stamp.approve");
+    const reviewStamp = cardEl.querySelector(".stamp.review");
+    const t = Math.min(Math.abs(curX) / 100, 1);
+    if(curX > 0){ approveStamp.style.opacity = t; reviewStamp.style.opacity = 0; }
+    else { reviewStamp.style.opacity = t; approveStamp.style.opacity = 0; }
+  });
+
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    const threshold = 110;
+    if(curX > threshold){ commitDecision(item, "approved", cardEl); }
+    else if(curX < -threshold){ commitDecision(item, "review", cardEl); }
+    else{
+      cardEl.style.transform = "translate(0,0) rotate(0deg)";
+      cardEl.querySelector(".stamp.approve").style.opacity = 0;
+      cardEl.querySelector(".stamp.review").style.opacity = 0;
+    }
+    curX = 0; curY = 0;
+  }
+
+  cardEl.addEventListener("pointerup", endDrag);
+  cardEl.addEventListener("pointercancel", endDrag);
+}
+
+function fileDecisionToDrive(item, status){
+  if(item.source !== "drive" || !currentProfile) return;
+  const targetFolder = status === "approved" ? currentProfile.approvedFolderId : currentProfile.reviewFolderId;
+  moveDriveFile(item.id, targetFolder, currentProfile.inboxFolderId).catch(err => {
+    alert(`Couldn't file "${item.name}" in Drive (${err.message}). Check it manually in Drive.`);
+  });
+}
+
+function commitDecision(item, status, cardEl){
+  const flyX = status === "approved" ? 900 : -900;
+  cardEl.style.transition = "transform .35s ease";
+  cardEl.style.transform = `translate(${flyX}px, -40px) rotate(${flyX/14}deg)`;
+  recordDecision(item.key, item.name, status);
+  history.push({item, status});
+  index += 1;
+  setTimeout(() => buildStack(), 220);
+  fileDecisionToDrive(item, status);
+}
+
+el("btn-approve").addEventListener("click", () => decideCurrent("approved"));
+el("btn-review").addEventListener("click", () => decideCurrent("review"));
+function decideCurrent(status){
+  if(index >= queue.length) return;
+  const item = queue[index];
+  const cardEl = el("stack").querySelector(`.card[data-key="${CSS.escape(item.key)}"]`);
+  if(cardEl) commitDecision(item, status, cardEl);
+}
+
+el("btn-undo").addEventListener("click", () => {
+  if(!history.length) return;
+  const last = history.pop();
+  index = Math.max(index - 1, 0);
+  const log = loadLog();
+  delete log[last.item.key];
+  saveLog(log);
+  if(last.item.source === "drive" && currentProfile){
+    const targetFolder = last.status === "approved" ? currentProfile.approvedFolderId : currentProfile.reviewFolderId;
+    moveDriveFile(last.item.id, currentProfile.inboxFolderId, targetFolder).catch(err => {
+      alert(`Couldn't move "${last.item.name}" back to Inbox in Drive (${err.message}).`);
+    });
+  }
+  buildStack();
+});
+
+// ---------- summary ----------
+function finishBatch(){
+  const log = loadLog();
+  const batchKeys = new Set(queue.map(q=>q.key));
+  let approved=0, review=0;
+  batchKeys.forEach(k => {
+    const entry = log[k];
+    if(entry && entry.status === "approved") approved++;
+    else if(entry && entry.status === "review") review++;
+  });
+  el("sum-approved").textContent = approved;
+  el("sum-review").textContent = review;
+  const anyLocal = queue.some(q => q.source === "local");
+  el("export-actions").style.display = anyLocal ? "flex" : "none";
+  el("drive-filed-note").style.display = anyLocal ? "none" : "block";
+  showScreen("summary-screen");
+}
+
+async function buildZip(status){
+  if(!window.JSZip){ alert("Zip library failed to load. Check your internet connection and try again."); return; }
+  const zip = new JSZip();
+  const log = loadLog();
+  let count = 0;
+  for(const item of queue){
+    const entry = log[item.key];
+    if(entry && entry.status === status){
+      try{
+        const blob = await getItemBlob(item);
+        if(blob){ zip.file(item.name, blob); count++; }
+      }catch(e){ /* skip file that failed to fetch */ }
+    }
+  }
+  if(!count){ alert("No files in this category yet."); return; }
+  const blob = await zip.generateAsync({type:"blob"});
+  triggerDownload(blob, `AppRove_${status}_${dateStamp()}.zip`);
+}
+
+function dateStamp(){ return new Date().toISOString().slice(0,10); }
+
+function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+el("download-zip-approved").addEventListener("click", () => buildZip("approved"));
+el("download-zip-review").addEventListener("click", () => buildZip("review"));
+el("download-csv").addEventListener("click", () => {
+  const log = loadLog();
+  const rows = [["filename","status","timestamp","pm"]];
+  Object.values(log).forEach(e => rows.push([e.name, e.status, e.timestamp, e.pm || ""]));
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  triggerDownload(blob, `AppRove_log_${dateStamp()}.csv`);
+});
+
+window.addEventListener("resize", () => { if(queue.length) buildStack(); });
+</script>
+</body>
+</html>
