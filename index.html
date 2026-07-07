@@ -795,4 +795,12 @@ el("download-csv").addEventListener("click", () => {
   const log = loadLog();
   const rows = [["filename","status","timestamp","pm"]];
   Object.values(log).forEach(e => rows.push([e.name, e.status, e.timestamp, e.pm || ""]));
-  const csv = rows.ma
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  triggerDownload(blob, `AppRove_log_${dateStamp()}.csv`);
+});
+
+window.addEventListener("resize", () => { if(queue.length) buildStack(); });
+</script>
+</body>
+</html>
