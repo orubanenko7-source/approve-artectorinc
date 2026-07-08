@@ -47,10 +47,10 @@
   .screen.active{display:flex; flex-direction:column; animation:screenIn .32s ease;}
   @keyframes screenIn{ from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
   .centered-screen{align-items:center; justify-content:center; text-align:center; padding:32px; overflow-y:auto;}
-  #instructions-screen{position:relative; justify-content:flex-end; padding-bottom:calc(env(safe-area-inset-bottom,0px) + 130px); background:#ececec;}
+  #instructions-screen{position:relative; justify-content:flex-end; padding-bottom:calc(env(safe-area-inset-bottom,0px) + 130px); background:#ececec; overflow:hidden;}
   #instructions-screen .bg-video{
     position:absolute; inset:0; width:100%; height:100%; object-fit:contain; z-index:0;
-    transform:scale(1.15);
+    transform:scale(1.15); pointer-events:none;
   }
   #instructions-screen .btn{position:relative; z-index:2;}
   .centered-screen .icon{font-size:52px; margin-bottom:14px; animation:iconPop .4s ease;}
@@ -800,4 +800,4 @@ el("download-csv").addEventListener("click", () => {
   triggerDownload(blob, `AppRove_log_${dateStamp()}.csv`);
 });
 
-window.addEventListener("resize", () => { if(queue.length) buildStack(); });
+window.addEventListener("resize", () =
