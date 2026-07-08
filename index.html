@@ -800,4 +800,7 @@ el("download-csv").addEventListener("click", () => {
   triggerDownload(blob, `AppRove_log_${dateStamp()}.csv`);
 });
 
-window.addEventListener("resize", () =
+window.addEventListener("resize", () => { if(queue.length) buildStack(); });
+</script>
+</body>
+</html>
