@@ -125,15 +125,25 @@
 
   .actions{flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:14px; padding:8px 0 4px;}
   .fab{
-    width:58px; height:58px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center;
-    font-size:24px; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.35);
-    transition:transform .12s ease;
+    width:64px; height:64px; border-radius:50%; border:none; padding:0; background:transparent;
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    cursor:pointer; transition:transform .12s ease;
   }
-  .fab:active{transform:scale(.85);}
-  .fab.review{background:var(--amber); color:#221a03;}
-  .fab.approve{background:var(--green); color:#04220f;}
-  .fab.undo{width:46px; height:46px; background:var(--card2); color:var(--text); font-size:18px;}
-  .inbox-list-btn{flex:0 0 auto; align-self:center; margin:2px 0 calc(env(safe-area-inset-bottom,0px) + 8px); width:100%; max-width:460px;}
+  .fab img{width:100%; height:100%; object-fit:contain; display:block; pointer-events:none;}
+  .fab:active{transform:scale(.88);}
+  .fab.undo{width:52px; height:52px;}
+  .inbox-list-btn{
+    flex:0 0 auto; align-self:center; margin:2px 0 calc(env(safe-area-inset-bottom,0px) + 8px);
+    position:relative; display:inline-block; border:none; background:transparent; padding:0; cursor:pointer;
+    width:auto; max-width:220px; transition:transform .12s ease;
+  }
+  .inbox-list-btn img{width:100%; height:auto; display:block; pointer-events:none;}
+  .inbox-list-btn:active{transform:scale(.96);}
+  .inbox-badge{
+    position:absolute; top:-4px; right:-4px; min-width:20px; height:20px; padding:0 5px;
+    border-radius:10px; background:var(--red); color:#fff; font-size:11px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
   .inbox-list{max-height:56vh; overflow-y:auto; margin-top:10px; text-align:left;}
   .inbox-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
@@ -214,11 +224,14 @@
 <div class="screen" id="swipe-screen">
   <div class="stack" id="stack"></div>
   <div class="actions">
-    <button class="fab review" id="btn-review" title="Needs review">⏳</button>
-    <button class="fab undo" id="btn-undo" title="Undo">↩︎</button>
-    <button class="fab approve" id="btn-approve" title="Approve">✓</button>
+    <button class="fab review" id="btn-review" title="Needs review"><img src="btn-review.png" alt="Needs review"></button>
+    <button class="fab undo" id="btn-undo" title="Undo"><img src="btn-undo.png" alt="Undo"></button>
+    <button class="fab approve" id="btn-approve" title="Approve"><img src="btn-approve.png" alt="Approve"></button>
   </div>
-  <button class="btn small secondary inbox-list-btn" id="inbox-list-btn">📋 Browse Inbox (<span id="inbox-count">0</span>)</button>
+  <button class="inbox-list-btn" id="inbox-list-btn">
+    <img src="btn-inbox.png" alt="Browse Inbox">
+    <span class="inbox-badge" id="inbox-count">0</span>
+  </button>
 </div>
 
 <div class="screen centered-screen" id="summary-screen">
