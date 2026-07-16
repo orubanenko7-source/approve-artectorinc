@@ -134,7 +134,7 @@
   .fab.approve{background:var(--green); color:#04220f;}
   .fab.undo{width:46px; height:46px; background:var(--card2); color:var(--text); font-size:18px;}
   .hint-row{flex:0 0 auto; text-align:center; color:var(--sub); font-size:12px; padding-bottom:4px;}
-  .inbox-list-btn{flex:0 0 auto; align-self:center; margin-bottom:8px; width:100%; max-width:460px;}
+  .inbox-list-btn{flex:0 0 auto; align-self:center; margin:6px 0 calc(env(safe-area-inset-bottom,0px) + 10px); width:100%; max-width:460px;}
   .inbox-list{max-height:56vh; overflow-y:auto; margin-top:10px; text-align:left;}
   .inbox-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
@@ -213,7 +213,6 @@
 </div>
 
 <div class="screen" id="swipe-screen">
-  <button class="btn small secondary inbox-list-btn" id="inbox-list-btn">📋 Browse Inbox (<span id="inbox-count">0</span>)</button>
   <div class="stack" id="stack"></div>
   <div class="hint-row">Pinch or double‑tap to zoom · Drag to pan · Tap ✓ or ↩︎ to decide</div>
   <div class="actions">
@@ -221,6 +220,7 @@
     <button class="fab undo" id="btn-undo" title="Undo">↩︎</button>
     <button class="fab approve" id="btn-approve" title="Approve">✓</button>
   </div>
+  <button class="btn small secondary inbox-list-btn" id="inbox-list-btn">📋 Browse Inbox (<span id="inbox-count">0</span>)</button>
 </div>
 
 <div class="screen centered-screen" id="summary-screen">
