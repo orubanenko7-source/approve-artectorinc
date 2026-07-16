@@ -112,9 +112,8 @@
     padding:10px 14px; font-size:13px; color:var(--sub); border-bottom:1px solid #2a2f3a;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto;
   }
-  .card-viewport{flex:1 1 auto; overflow:hidden; position:relative; background:#0c0e12;}
-  .card-viewport.zoomed{overflow:auto; -webkit-overflow-scrolling:touch;}
-  .card-viewport canvas{display:block; margin:0 auto; transition:width .18s ease;}
+  .card-viewport{flex:1 1 auto; overflow:hidden; position:relative; background:#0c0e12; touch-action:none;}
+  .card-viewport canvas{display:block; margin:0 auto; transition:transform .2s ease; transform-origin:center center; will-change:transform;}
   .stamp{
     position:absolute; top:26px; padding:6px 14px; border:4px solid; border-radius:10px;
     font-size:22px; font-weight:800; letter-spacing:1px; opacity:0; transform:rotate(-18deg);
@@ -135,6 +134,16 @@
   .fab.approve{background:var(--green); color:#04220f;}
   .fab.undo{width:46px; height:46px; background:var(--card2); color:var(--text); font-size:18px;}
   .hint-row{flex:0 0 auto; text-align:center; color:var(--sub); font-size:12px; padding-bottom:4px;}
+  .inbox-list-btn{flex:0 0 auto; align-self:center; margin-bottom:8px; width:100%; max-width:460px;}
+  .inbox-list{max-height:56vh; overflow-y:auto; margin-top:10px; text-align:left;}
+  .inbox-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
+    background:var(--card2); border:none; border-radius:10px; color:var(--text);
+    padding:12px 14px; margin-bottom:8px; font-size:0.875rem; text-align:left; cursor:pointer;
+  }
+  .inbox-row:active{background:var(--brand-blue); color:#fff;}
+  .inbox-row .fname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto;}
+  .inbox-row .go{flex:0 0 auto; color:var(--sub); font-size:12px;}
 
   /* ---- Summary screen ---- */
   .stat-row{display:flex; gap:14px; margin:18px 0 26px;}
@@ -204,8 +213,9 @@
 </div>
 
 <div class="screen" id="swipe-screen">
+  <button class="btn small secondary inbox-list-btn" id="inbox-list-btn">📋 Browse Inbox (<span id="inbox-count">0</span>)</button>
   <div class="stack" id="stack"></div>
-  <div class="hint-row">Swipe right = approve · Swipe left = review later · Double‑tap = zoom</div>
+  <div class="hint-row">Pinch or double‑tap to zoom · Drag to pan · Tap ✓ or ↩︎ to decide</div>
   <div class="actions">
     <button class="fab review" id="btn-review" title="Needs review">⏳</button>
     <button class="fab undo" id="btn-undo" title="Undo">↩︎</button>
@@ -228,6 +238,16 @@
     </div>
     <button class="btn secondary" id="download-csv">Download CSV log</button>
     <button class="btn ghost" id="load-more-btn">Check Drive for new invoices</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="inbox-modal">
+  <div class="modal-box">
+    <h2>Inbox</h2>
+    <div id="inbox-list" class="inbox-list"></div>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn secondary" id="inbox-modal-close">Close</button>
+    </div>
   </div>
 </div>
 
@@ -544,7 +564,50 @@ el("load-more-btn").addEventListener("click", () => {
 function updateHeader(){
   const pct = queue.length ? (index / queue.length) * 100 : 0;
   el("progress-fill").style.width = pct + "%";
+  const remaining = Math.max(queue.length - index, 0);
+  const countEl = el("inbox-count");
+  if(countEl) countEl.textContent = remaining;
 }
+
+// ---------- browse inbox / pick an invoice ----------
+function renderInboxList(){
+  const list = el("inbox-list");
+  list.innerHTML = "";
+  const remaining = queue.slice(index);
+  if(!remaining.length){
+    list.innerHTML = '<div class="loading-hint">No invoices waiting.</div>';
+    return;
+  }
+  remaining.forEach(item => {
+    const row = document.createElement("button");
+    row.className = "inbox-row";
+    const name = document.createElement("span");
+    name.className = "fname";
+    name.textContent = item.name;
+    const go = document.createElement("span");
+    go.className = "go";
+    go.textContent = "Open ›";
+    row.appendChild(name);
+    row.appendChild(go);
+    row.addEventListener("click", () => {
+      jumpToItem(item.key);
+      el("inbox-modal").classList.add("hidden");
+    });
+    list.appendChild(row);
+  });
+}
+function jumpToItem(key){
+  const pos = queue.findIndex((q, i) => i >= index && q.key === key);
+  if(pos < 0 || pos === index){ buildStack(); return; }
+  const [item] = queue.splice(pos, 1);
+  queue.splice(index, 0, item);
+  buildStack();
+}
+el("inbox-list-btn").addEventListener("click", () => {
+  renderInboxList();
+  el("inbox-modal").classList.remove("hidden");
+});
+el("inbox-modal-close").addEventListener("click", () => el("inbox-modal").classList.add("hidden"));
 
 function buildStack(){
   const stack = el("stack");
@@ -557,7 +620,6 @@ function buildStack(){
     const item = visible[i];
     const cardEl = makeCardEl(item, i);
     stack.appendChild(cardEl);
-    if(i === 0) attachGestures(cardEl, item);
     renderPdfIntoCard(item, cardEl);
   }
 }
@@ -625,75 +687,104 @@ async function renderPdfIntoCard(item, cardEl){
   }
 }
 
-function attachZoom(key){
+// ---------- pinch-to-zoom + pan ----------
+const MIN_SCALE = 1, MAX_SCALE = 4;
+
+function clampPan(rec){
+  const maxX = Math.max(0, (rec.scale - 1) * rec.viewport.clientWidth / 2);
+  const maxY = Math.max(0, (rec.scale - 1) * rec.viewport.clientHeight / 2);
+  rec.panX = Math.min(maxX, Math.max(-maxX, rec.panX));
+  rec.panY = Math.min(maxY, Math.max(-maxY, rec.panY));
+}
+
+function applyZoomTransform(rec){
+  rec.canvas.style.transform = `translate(${rec.panX}px, ${rec.panY}px) scale(${rec.scale})`;
+}
+
+function setZoomScale(key, scale, animate){
   const rec = renderedCards.get(key);
   if(!rec) return;
-  let lastTap = 0;
-  rec.viewport.addEventListener("touchend", (e) => {
-    const now = Date.now();
-    if(now - lastTap < 300){
-      toggleZoom(key);
-      e.preventDefault();
-    }
-    lastTap = now;
-  });
-  rec.viewport.addEventListener("dblclick", () => toggleZoom(key));
+  rec.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+  if(rec.scale === 1){ rec.panX = 0; rec.panY = 0; }
+  clampPan(rec);
+  rec.canvas.style.transition = animate ? "transform .2s ease" : "none";
+  applyZoomTransform(rec);
 }
 
 function toggleZoom(key){
   const rec = renderedCards.get(key);
   if(!rec) return;
-  rec.zoomed = !rec.zoomed;
-  rec.viewport.classList.toggle("zoomed", rec.zoomed);
-  rec.canvas.style.width = rec.zoomed ? "220%" : "100%";
-  if(!rec.zoomed){ rec.viewport.scrollTop = 0; rec.viewport.scrollLeft = 0; }
+  setZoomScale(key, rec.scale > 1 ? 1 : 2.2, true);
 }
 
 function isZoomed(key){
   const rec = renderedCards.get(key);
-  return rec ? rec.zoomed : false;
+  return rec ? rec.scale > 1 : false;
 }
 
-// ---------- swipe gestures ----------
-function attachGestures(cardEl, item){
-  let startX=0, startY=0, curX=0, curY=0, dragging=false;
+function attachZoom(key){
+  const rec = renderedCards.get(key);
+  if(!rec) return;
+  rec.scale = 1; rec.panX = 0; rec.panY = 0;
 
-  cardEl.addEventListener("pointerdown", (e) => {
-    if(isZoomed(item.key)) return;
-    dragging = true;
-    startX = e.clientX; startY = e.clientY;
-    cardEl.setPointerCapture(e.pointerId);
-  });
+  const pointers = new Map(); // pointerId -> {x,y}
+  let pinchStartDist = 0, pinchStartScale = 1;
+  let panStart = null; // {x,y,panX,panY}
+  let lastTap = 0;
 
-  cardEl.addEventListener("pointermove", (e) => {
-    if(!dragging) return;
-    curX = e.clientX - startX;
-    curY = e.clientY - startY;
-    const rot = curX / 14;
-    cardEl.style.transform = `translate(${curX}px, ${curY}px) rotate(${rot}deg)`;
-    const approveStamp = cardEl.querySelector(".stamp.approve");
-    const reviewStamp = cardEl.querySelector(".stamp.review");
-    const t = Math.min(Math.abs(curX) / 100, 1);
-    if(curX > 0){ approveStamp.style.opacity = t; reviewStamp.style.opacity = 0; }
-    else { reviewStamp.style.opacity = t; approveStamp.style.opacity = 0; }
-  });
+  function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
 
-  function endDrag(){
-    if(!dragging) return;
-    dragging = false;
-    const threshold = 110;
-    if(curX > threshold){ commitDecision(item, "approved", cardEl); }
-    else if(curX < -threshold){ commitDecision(item, "review", cardEl); }
-    else{
-      cardEl.style.transform = "translate(0,0) rotate(0deg)";
-      cardEl.querySelector(".stamp.approve").style.opacity = 0;
-      cardEl.querySelector(".stamp.review").style.opacity = 0;
+  rec.viewport.addEventListener("pointerdown", (e) => {
+    rec.viewport.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    rec.canvas.style.transition = "none";
+    if(pointers.size === 2){
+      const [a,b] = [...pointers.values()];
+      pinchStartDist = dist(a,b) || 1;
+      pinchStartScale = rec.scale;
+      panStart = null;
+    } else if(pointers.size === 1){
+      panStart = { x:e.clientX, y:e.clientY, panX:rec.panX, panY:rec.panY };
     }
-    curX = 0; curY = 0;
-  }
+  });
 
-  cardEl.addEventListener("pointerup", endDrag);
-  cardEl.addEventListener("pointercancel", endDrag);
+  rec.viewport.addEventListener("pointermove", (e) => {
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+    if(pointers.size === 2){
+      const [a,b] = [...pointers.values()];
+      const d = dist(a,b) || 1;
+      rec.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchStartScale * (d / pinchStartDist)));
+      clampPan(rec);
+      applyZoomTransform(rec);
+    } else if(pointers.size === 1 && panStart && rec.scale > 1){
+      rec.panX = panStart.panX + (e.clientX - panStart.x);
+      rec.panY = panStart.panY + (e.clientY - panStart.y);
+      clampPan(rec);
+      applyZoomTransform(rec);
+    }
+  });
+
+  function release(e){
+    pointers.delete(e.pointerId);
+    if(pointers.size === 1){
+      const [only] = [...pointers.values()];
+      panStart = { x:only.x, y:only.y, panX:rec.panX, panY:rec.panY };
+    } else if(pointers.size === 0){
+      panStart = null;
+      if(rec.scale < 1.05) setZoomScale(key, 1, true);
+    }
+  }
+  rec.viewport.addEventListener("pointerup", release);
+  rec.viewport.addEventListener("pointercancel", release);
+
+  rec.viewport.addEventListener("dblclick", () => toggleZoom(key));
+  rec.viewport.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if(now - lastTap < 300 && pointers.size === 0){ toggleZoom(key); e.preventDefault(); }
+    lastTap = now;
+  });
 }
 
 function fileDecisionToDrive(item, status){
@@ -705,6 +796,8 @@ function fileDecisionToDrive(item, status){
 }
 
 function commitDecision(item, status, cardEl){
+  const stamp = cardEl.querySelector(status === "approved" ? ".stamp.approve" : ".stamp.review");
+  if(stamp) stamp.style.opacity = 1;
   const flyX = status === "approved" ? 900 : -900;
   cardEl.style.transition = "transform .35s ease";
   cardEl.style.transform = `translate(${flyX}px, -40px) rotate(${flyX/14}deg)`;
