@@ -123,7 +123,7 @@
   .stamp.review{right:20px; color:var(--amber); border-color:var(--amber); transform:rotate(18deg);}
   .loading-hint{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:13px; text-align:center; padding:20px;}
 
-  .actions{flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:22px; padding:16px 0 calc(env(safe-area-inset-bottom,0px) + 16px);}
+  .actions{flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:14px; padding:8px 0 4px;}
   .fab{
     width:58px; height:58px; border-radius:50%; border:none; display:flex; align-items:center; justify-content:center;
     font-size:24px; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.35);
@@ -133,8 +133,7 @@
   .fab.review{background:var(--amber); color:#221a03;}
   .fab.approve{background:var(--green); color:#04220f;}
   .fab.undo{width:46px; height:46px; background:var(--card2); color:var(--text); font-size:18px;}
-  .hint-row{flex:0 0 auto; text-align:center; color:var(--sub); font-size:12px; padding-bottom:4px;}
-  .inbox-list-btn{flex:0 0 auto; align-self:center; margin:6px 0 calc(env(safe-area-inset-bottom,0px) + 10px); width:100%; max-width:460px;}
+  .inbox-list-btn{flex:0 0 auto; align-self:center; margin:2px 0 calc(env(safe-area-inset-bottom,0px) + 8px); width:100%; max-width:460px;}
   .inbox-list{max-height:56vh; overflow-y:auto; margin-top:10px; text-align:left;}
   .inbox-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
@@ -214,7 +213,6 @@
 
 <div class="screen" id="swipe-screen">
   <div class="stack" id="stack"></div>
-  <div class="hint-row">Pinch or double‑tap to zoom · Drag to pan · Tap ✓ or ↩︎ to decide</div>
   <div class="actions">
     <button class="fab review" id="btn-review" title="Needs review">⏳</button>
     <button class="fab undo" id="btn-undo" title="Undo">↩︎</button>
