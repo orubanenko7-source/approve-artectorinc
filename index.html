@@ -313,6 +313,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 if(window.pdfjsLib){
@@ -320,7 +321,7 @@ if(window.pdfjsLib){
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  if(!window.pdfjsLib || !window.JSZip || !window.PDFLib){
+  if(!window.pdfjsLib || !window.JSZip || !window.PDFLib || !window.fontkit){
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#7c2d12;color:#fff;font-size:12px;padding:8px 12px;text-align:center;z-index:999;";
     banner.textContent = "Some features failed to load (no internet connection?). PIN and navigation still work, but PDF viewing, notes, or zip export may not. Reload once you're online.";
@@ -548,13 +549,28 @@ async function updateDriveFileContent(fileId, blob){
 }
 
 // ---------- notes (stamped onto the PDF) ----------
+let cachedUnicodeFontBytes = null;
+async function getUnicodeFontBytes(){
+  if(!cachedUnicodeFontBytes){
+    const res = await fetch("https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf");
+    if(!res.ok) throw new Error("Couldn't load the font needed for the note.");
+    cachedUnicodeFontBytes = await res.arrayBuffer();
+  }
+  return cachedUnicodeFontBytes;
+}
+async function embedUnicodeFont(pdfDoc){
+  if(!window.fontkit) throw new Error("Font library didn't load. Check your internet connection.");
+  pdfDoc.registerFontkit(window.fontkit);
+  const bytes = await getUnicodeFontBytes();
+  return await pdfDoc.embedFont(bytes, { subset: true });
+}
 async function stampNote(blob, noteText){
   if(!window.PDFLib) throw new Error("Note library didn't load. Check your internet connection.");
   const bytes = await blob.arrayBuffer();
   const pdfDoc = await PDFLib.PDFDocument.load(bytes);
   const page = pdfDoc.getPages()[0];
   const { width } = page.getSize();
-  const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const font = await embedUnicodeFont(pdfDoc);
   const fontSize = 10;
   const margin = 24;
   const maxWidth = width - margin * 2 - 16;
@@ -587,7 +603,7 @@ async function stampApproval(blob, pmName){
   const pdfDoc = await PDFLib.PDFDocument.load(bytes);
   const page = pdfDoc.getPages()[0];
   const { width, height } = page.getSize();
-  const font = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+  const font = await embedUnicodeFont(pdfDoc);
   const line1 = "APPROVED";
   const line2 = `by ${pmName} · ${new Date().toLocaleDateString()}`;
   const size1 = 15, size2 = 9;
