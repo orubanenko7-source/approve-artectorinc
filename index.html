@@ -109,9 +109,15 @@
   }
   @keyframes cardIn{ from{opacity:0;} to{opacity:1;} }
   .card .filename{
-    padding:10px 14px; font-size:13px; color:var(--sub); border-bottom:1px solid #2a2f3a;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto;
+    padding:8px 8px 8px 14px; font-size:13px; color:var(--sub); border-bottom:1px solid #2a2f3a;
+    flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:8px;
   }
+  .card .filename .fname-text{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1 1 auto;}
+  .note-btn{
+    flex:0 0 auto; background:var(--card2); border:none; color:var(--sub); font-size:15px;
+    cursor:pointer; padding:6px 9px; border-radius:8px; line-height:1;
+  }
+  .note-btn.has-note{background:rgba(245,158,11,.2); color:var(--amber);}
   .card-viewport{flex:1 1 auto; overflow:hidden; position:relative; background:#0c0e12; touch-action:none; display:flex; align-items:center; justify-content:center;}
   .card-viewport canvas{display:block; max-width:100%; max-height:100%; transition:transform .2s ease; transform-origin:center center; will-change:transform;}
   .stamp{
@@ -251,6 +257,20 @@
   </div>
 </div>
 
+<div class="modal hidden" id="note-modal">
+  <div class="modal-box">
+    <h2 id="note-modal-title">Add a note</h2>
+    <label>Note</label>
+    <textarea id="note-textarea" rows="4" placeholder="e.g. Missing PO number, confirm with vendor..."
+      style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #333a47; background:var(--card2); color:var(--text); font-size:0.9375rem; font-family:inherit; resize:vertical;"></textarea>
+    <p class="fine-print">This gets stamped onto the invoice PDF itself when you approve it or send it to review.</p>
+    <div style="display:flex; gap:10px; margin-top:14px;">
+      <button class="btn secondary" id="note-cancel">Cancel</button>
+      <button class="btn" id="note-save">Save Note</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal hidden" id="inbox-modal">
   <div class="modal-box">
     <h2>Inbox</h2>
@@ -292,6 +312,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 if(window.pdfjsLib){
@@ -299,10 +320,10 @@ if(window.pdfjsLib){
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  if(!window.pdfjsLib || !window.JSZip){
+  if(!window.pdfjsLib || !window.JSZip || !window.PDFLib){
     const banner = document.createElement("div");
     banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#7c2d12;color:#fff;font-size:12px;padding:8px 12px;text-align:center;z-index:999;";
-    banner.textContent = "Some features failed to load (no internet connection?). PIN and navigation still work, but PDF viewing or zip export may not. Reload once you're online.";
+    banner.textContent = "Some features failed to load (no internet connection?). PIN and navigation still work, but PDF viewing, notes, or zip export may not. Reload once you're online.";
     document.body.prepend(banner);
   }
 });
@@ -371,6 +392,7 @@ let queue = [];        // [{id?, key, name, blob, source}]
 let index = 0;
 let history = [];      // stack of {item, status} for undo
 let renderedCards = new Map(); // key -> {el, viewport, canvas, zoomed}
+let itemNotes = new Map(); // key -> note text, stamped onto the PDF on decision
 
 // ---------- persistent decision log ----------
 function loadLog(){
@@ -515,6 +537,126 @@ async function getItemBlob(item){
   }
   return item.blob;
 }
+async function updateDriveFileContent(fileId, blob){
+  const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: "PATCH",
+    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/pdf" },
+    body: blob
+  });
+  if(!res.ok) throw new Error(`Couldn't save the note to Drive (error ${res.status}).`);
+  return await res.json();
+}
+
+// ---------- notes (stamped onto the PDF) ----------
+async function stampNote(blob, noteText){
+  if(!window.PDFLib) throw new Error("Note library didn't load. Check your internet connection.");
+  const bytes = await blob.arrayBuffer();
+  const pdfDoc = await PDFLib.PDFDocument.load(bytes);
+  const page = pdfDoc.getPages()[0];
+  const { width } = page.getSize();
+  const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const fontSize = 10;
+  const margin = 24;
+  const maxWidth = width - margin * 2 - 16;
+  const words = noteText.split(/\s+/);
+  const lines = [];
+  let cur = "";
+  for(const w of words){
+    const test = cur ? cur + " " + w : w;
+    if(cur && font.widthOfTextAtSize(test, fontSize) > maxWidth){ lines.push(cur); cur = w; }
+    else cur = test;
+  }
+  if(cur) lines.push(cur);
+  const lineHeight = fontSize + 4;
+  const boxHeight = lines.length * lineHeight + 24;
+  page.drawRectangle({
+    x: margin, y: margin, width: width - margin * 2, height: boxHeight,
+    color: PDFLib.rgb(1, 0.93, 0.55), opacity: 0.92,
+    borderColor: PDFLib.rgb(0.7, 0.55, 0), borderWidth: 1
+  });
+  page.drawText("NOTE:", { x: margin + 10, y: margin + boxHeight - 16, size: fontSize, font, color: PDFLib.rgb(0.35, 0.25, 0) });
+  lines.forEach((line, i) => {
+    page.drawText(line, { x: margin + 10, y: margin + boxHeight - 32 - i * lineHeight, size: fontSize, font, color: PDFLib.rgb(0.2, 0.15, 0) });
+  });
+  const outBytes = await pdfDoc.save();
+  return new Blob([outBytes], { type: "application/pdf" });
+}
+async function stampApproval(blob, pmName){
+  if(!window.PDFLib) throw new Error("Stamp library didn't load. Check your internet connection.");
+  const bytes = await blob.arrayBuffer();
+  const pdfDoc = await PDFLib.PDFDocument.load(bytes);
+  const page = pdfDoc.getPages()[0];
+  const { width, height } = page.getSize();
+  const font = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+  const line1 = "APPROVED";
+  const line2 = `by ${pmName} · ${new Date().toLocaleDateString()}`;
+  const size1 = 15, size2 = 9;
+  const boxW = Math.max(font.widthOfTextAtSize(line1, size1), font.widthOfTextAtSize(line2, size2)) + 28;
+  const boxH = 44;
+  const margin = 24;
+  const x = width - boxW - margin;
+  const y = height - boxH - margin;
+  page.drawRectangle({
+    x, y, width: boxW, height: boxH,
+    color: PDFLib.rgb(0.85, 1, 0.9), opacity: 0.92,
+    borderColor: PDFLib.rgb(0.05, 0.55, 0.25), borderWidth: 2.5
+  });
+  page.drawText(line1, { x: x + 14, y: y + boxH - 20, size: size1, font, color: PDFLib.rgb(0.02, 0.45, 0.2) });
+  page.drawText(line2, { x: x + 14, y: y + 10, size: size2, font, color: PDFLib.rgb(0.05, 0.35, 0.15) });
+  const outBytes = await pdfDoc.save();
+  return new Blob([outBytes], { type: "application/pdf" });
+}
+async function getFinalBlob(item, status){
+  let blob = await getItemBlob(item);
+  const note = itemNotes.get(item.key);
+  try{
+    if(note && note.trim()){
+      blob = await stampNote(blob, note.trim());
+    }
+    if(status === "approved" && currentProfile){
+      blob = await stampApproval(blob, currentProfile.name);
+    }
+  }catch(err){
+    console.error("Couldn't stamp PDF:", err);
+  }
+  return blob;
+}
+let noteEditingKey = null;
+let noteModalMode = "edit"; // "edit" = just save the note | "review" = save note, then send to review
+function openNoteEditor(key){
+  noteEditingKey = key;
+  noteModalMode = "edit";
+  el("note-modal-title").textContent = "Add a note";
+  el("note-save").textContent = "Save Note";
+  el("note-textarea").value = itemNotes.get(key) || "";
+  el("note-modal").classList.remove("hidden");
+}
+function promptReviewNote(){
+  if(index >= queue.length) return;
+  const item = queue[index];
+  noteEditingKey = item.key;
+  noteModalMode = "review";
+  el("note-modal-title").textContent = "Leave a note for review (optional)";
+  el("note-save").textContent = "Send to Review";
+  el("note-textarea").value = itemNotes.get(item.key) || "";
+  el("note-modal").classList.remove("hidden");
+  el("note-textarea").focus();
+}
+el("note-cancel").addEventListener("click", () => el("note-modal").classList.add("hidden"));
+el("note-save").addEventListener("click", () => {
+  const text = el("note-textarea").value.trim();
+  if(text) itemNotes.set(noteEditingKey, text); else itemNotes.delete(noteEditingKey);
+  const btn = document.querySelector(`.card[data-key="${CSS.escape(noteEditingKey)}"] .note-btn`);
+  if(btn){
+    btn.textContent = itemNotes.has(noteEditingKey) ? "📝" : "🖊️";
+    btn.classList.toggle("has-note", itemNotes.has(noteEditingKey));
+  }
+  el("note-modal").classList.add("hidden");
+  if(noteModalMode === "review"){
+    noteModalMode = "edit";
+    decideCurrent("review");
+  }
+});
 
 function showLoadingError(title, sub, isInfo){
   el("loading-title").textContent = title;
@@ -645,7 +787,17 @@ function makeCardEl(item, depthFromTop){
 
   const fname = document.createElement("div");
   fname.className = "filename";
-  fname.textContent = item.name;
+  const nameText = document.createElement("span");
+  nameText.className = "fname-text";
+  nameText.textContent = item.name;
+  const noteBtn = document.createElement("button");
+  noteBtn.type = "button";
+  noteBtn.className = "note-btn" + (itemNotes.has(item.key) ? " has-note" : "");
+  noteBtn.textContent = itemNotes.has(item.key) ? "📝" : "🖊️";
+  noteBtn.title = "Add note";
+  noteBtn.addEventListener("click", (e) => { e.stopPropagation(); openNoteEditor(item.key); });
+  fname.appendChild(nameText);
+  fname.appendChild(noteBtn);
   card.appendChild(fname);
 
   const viewport = document.createElement("div");
@@ -805,12 +957,19 @@ function attachZoom(key){
   rec.viewport.addEventListener("pointercancel", release);
 }
 
-function fileDecisionToDrive(item, status){
+async function fileDecisionToDrive(item, status){
   if(item.source !== "drive" || !currentProfile) return;
   const targetFolder = status === "approved" ? currentProfile.approvedFolderId : currentProfile.reviewFolderId;
-  moveDriveFile(item.id, targetFolder, currentProfile.inboxFolderId).catch(err => {
+  try{
+    const needsStamp = status === "approved" || itemNotes.has(item.key);
+    if(needsStamp){
+      const stamped = await getFinalBlob(item, status);
+      await updateDriveFileContent(item.id, stamped);
+    }
+    await moveDriveFile(item.id, targetFolder, currentProfile.inboxFolderId);
+  }catch(err){
     alert(`Couldn't file "${item.name}" in Drive (${err.message}). Check it manually in Drive.`);
-  });
+  }
 }
 
 function commitDecision(item, status, cardEl){
@@ -827,7 +986,7 @@ function commitDecision(item, status, cardEl){
 }
 
 el("btn-approve").addEventListener("click", () => decideCurrent("approved"));
-el("btn-review").addEventListener("click", () => decideCurrent("review"));
+el("btn-review").addEventListener("click", () => promptReviewNote());
 function decideCurrent(status){
   if(index >= queue.length) return;
   const item = queue[index];
@@ -878,7 +1037,7 @@ async function buildZip(status){
     const entry = log[item.key];
     if(entry && entry.status === status){
       try{
-        const blob = await getItemBlob(item);
+        const blob = await getFinalBlob(item, status);
         if(blob){ zip.file(item.name, blob); count++; }
       }catch(e){ /* skip file that failed to fetch */ }
     }
