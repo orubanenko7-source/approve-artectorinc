@@ -571,8 +571,8 @@ async function stampNote(blob, noteText){
   const boxHeight = lines.length * lineHeight + 24;
   page.drawRectangle({
     x: margin, y: margin, width: width - margin * 2, height: boxHeight,
-    color: PDFLib.rgb(1, 0.93, 0.55), opacity: 0.92,
-    borderColor: PDFLib.rgb(0.7, 0.55, 0), borderWidth: 1
+    color: PDFLib.rgb(1, 0.93, 0.55), opacity: 0.32,
+    borderColor: PDFLib.rgb(0.7, 0.55, 0), borderWidth: 1, borderOpacity: 0.65
   });
   page.drawText("NOTE:", { x: margin + 10, y: margin + boxHeight - 16, size: fontSize, font, color: PDFLib.rgb(0.35, 0.25, 0) });
   lines.forEach((line, i) => {
@@ -593,9 +593,9 @@ async function stampApproval(blob, pmName){
   const size1 = 15, size2 = 9;
   const boxW = Math.max(font.widthOfTextAtSize(line1, size1), font.widthOfTextAtSize(line2, size2)) + 28;
   const boxH = 44;
-  const margin = 24;
-  const x = width - boxW - margin;
-  const y = height - boxH - margin;
+  const bottomOffset = 78; // clears a typical note box, which sits flush at the very bottom
+  const x = (width - boxW) / 2;
+  const y = bottomOffset;
   page.drawRectangle({
     x, y, width: boxW, height: boxH,
     color: PDFLib.rgb(0.85, 1, 0.9), opacity: 0.18,
